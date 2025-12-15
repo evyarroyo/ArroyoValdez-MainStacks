@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Berkeley Main (Gardner) Stacks 3D Map</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f0f0; color: #333; }
+        #canvas-container { width: 100vw; height: 100vh; display: block; position: absolute; top: 0; left: 0; z-index: 1; }
+        
+        /* --- Unified UI Panel (Creme Theme) - LEFT SIDE --- */
+        #ui-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 300px;
+            max-height: 90vh;
+            overflow-y: auto;
+            background: rgba(253, 251, 247, 0.98);
+            border: 1px solid #dcdcdc;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 4px 4px 15px rgba(0,0,0,0.15);
+            transition: transform 0.3s ease;
+            z-index: 2000;
+        }
+
+        #ui-panel.collapsed {
+            transform: translateX(-350px);
+        }
+
+        /* Toggle Button - LEFT SIDE */
+        #toggle-menu {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: #005f73;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            padding: 10px 15px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 14px;
+            z-index: 2001;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
+            display: none; 
+        }
+
+        /* Panel Header */
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #ddd;
+            padding-bottom: 10px;
+        }
+        .panel-header h2 { margin: 0; font-size: 18px; color: #005f73; }
+        .close-btn { background: none; border: none; color: #888; cursor: pointer; font-size: 20px; line-height: 1; }
+        .close-btn:hover { color: #000; }
+
+        /* Section Dividers */
+        .ui-section { margin-bottom: 25px; }
+        .ui-section-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: #444;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 5px;
+        }
+
+        /* Compass / NESW Pointer */
+        #compass-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 5px;
+            padding: 10px;
+            background: #e0f2f1;
+            border: 1px solid #b2dfdb;
+            border-radius: 4px;
+        }
+        .compass-rose {
+            position: relative;
+            width: 60px;
+            height: 60px;
+            border: 2px solid #00695c;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            color: #00695c;
+            font-size: 12px;
+            background: white;
+            /* Transition for smooth rotation */
+            transition: transform 0.1s linear; 
+        }
+        .compass-label { position: absolute; }
+        .compass-n { top: 2px; color: #d32f2f; }
+        .compass-s { bottom: 2px; }
+        .compass-e { right: 4px; }
+        .compass-w { left: 4px; }
+        .compass-arrow {
+            width: 0; 
+            height: 0; 
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-bottom: 15px solid #d32f2f; /* Red for North */
+            position: absolute;
+            top: 10px;
+        }
+
+        /* Floor Buttons */
+        .floor-btn {
+            display: block;
+            width: 100%;
+            background: #fff;
+            border: 1px solid #ccc;
+            color: #444;
+            padding: 12px;
+            margin-bottom: 8px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: all 0.2s;
+            text-align: left;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .floor-btn:hover { background: #f5f5f5; border-color: #999; }
+        .floor-btn.active { background: #005f73; color: #fff; border-color: #004c5c; }
+        .floor-desc { font-size: 11px; font-weight: normal; opacity: 0.9; display: block; margin-top: 2px; color: inherit; }
+
+        /* Legend Items */
+        .legend-item { display: flex; align-items: center; margin-bottom: 8px; font-size: 13px; color: #444; }
+        .legend-icon { width: 16px; height: 16px; margin-right: 12px; border-radius: 3px; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.1); }
+        
+        /* 3D Label Styles */
+        .label-3d {
+            font-family: 'Segoe UI', sans-serif;
+            font-weight: 600;
+            padding: 2px 4px;
+            border-radius: 4px;
+            pointer-events: none;
+            text-align: center;
+            font-size: 10px; 
+            color: white;
+            white-space: nowrap;
+            transition: opacity 0.2s;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            z-index: 1000;
+        }
+        .label-stack { background: rgba(40, 40, 40, 0.9); border: 1px solid rgba(255,255,255,0.3); font-size: 9px; }
+        .label-room { color: #333; border: 1px solid #e9c46a; background: #e9c46a; font-size: 11px; font-weight: bold; }
+        .label-marker { background: rgba(0, 0, 0, 0.8); padding: 4px 8px; border-radius: 12px; font-size: 11px; color: #fff; border: 1px solid white; }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #eee; }
+        ::-webkit-scrollbar-thumb { background: #bbb; border-radius: 3px; }
+    </style>
+    
+    <!-- Import Three.js -->
+    <script async src="https://unpkg.com/es-module-shims@1.8.0/dist/es-module-shims.js"></script>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+
+    <!-- Toggle Button -->
+    <button id="toggle-menu" onclick="toggleMenu(true)">☰ Menu</button>
+
+    <!-- Unified UI Panel (Left Side) -->
+    <div id="ui-panel">
+        <div class="panel-header">
+            <h2>Map Controls</h2>
+            <button class="close-btn" onclick="toggleMenu(false)">×</button>
+        </div>
+
+        <!-- Section 0: Orientation -->
+        <div class="ui-section">
+            <div class="ui-section-title">Orientation</div>
+            <div id="compass-container">
+                <div class="compass-rose" id="compass-rose">
+                    <span class="compass-label compass-n">N</span>
+                    <span class="compass-label compass-e">E</span>
+                    <span class="compass-label compass-s">S</span>
+                    <span class="compass-label compass-w">W</span>
+                    <div class="compass-arrow"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 1: Level Selection -->
+        <div class="ui-section">
+            <div class="ui-section-title">Select Level</div>
+            <button class="floor-btn" onclick="switchLevel('A')">LEVEL A<span class="floor-desc">Entrance, Circ, Offices</span></button>
+            <button class="floor-btn" onclick="switchLevel('B')">LEVEL B<span class="floor-desc">MAIN: A - DK34</span></button>
+            <button class="floor-btn" onclick="switchLevel('C')">LEVEL C<span class="floor-desc">MAIN: DK35 - JL</span></button>
+            <button class="floor-btn" onclick="switchLevel('D')">LEVEL D<span class="floor-desc">MAIN: JN - ZA & Folios</span></button>
+        </div>
+
+        <!-- Section 2: Legend -->
+        <div class="ui-section">
+            <div class="ui-section-title">Legend</div>
+            
+            <div style="font-weight:bold; margin:10px 0 5px; font-size:12px; color:#666;">Stack Collections</div>
+            <div class="legend-item"><span class="legend-icon" style="background:#E63946;"></span>Level B: A - DK34</div>
+            <div class="legend-item"><span class="legend-icon" style="background:#2A9D8F;"></span>Level C: DK35 - JL</div>
+            <div class="legend-item"><span class="legend-icon" style="background:#F4A261;"></span>Level D: JN - ZA</div>
+            <div class="legend-item"><span class="legend-icon" style="background:#D4AF37;"></span>Folios (East Wall D)</div>
+            <div class="legend-item"><span class="legend-icon" style="background:#2F4F4F;"></span>IPs (West D)</div>
+
+            <div style="font-weight:bold; margin:15px 0 5px; font-size:12px; color:#666;">Facilities</div>
+            <div class="legend-item"><span class="legend-icon" style="background:#00ffff;"></span>Drinking Fountain</div>
+            <div class="legend-item"><span class="legend-icon" style="background:#ff0000;"></span>Emergency Kiosk</div>
+            <div class="legend-item"><span class="legend-icon" style="background:#00ff00;"></span>Emergency Exit</div>
+            <div class="legend-item"><span class="legend-icon" style="background:#ff00ff;"></span>Restroom</div>
+            <div class="legend-item"><span class="legend-icon" style="background:#ffff00;"></span>Elevator</div>
+
+            <div style="font-weight:bold; margin:15px 0 5px; font-size:12px; color:#666;">Services & Tech</div>
+            <div class="legend-item"><span class="legend-icon" style="background:#3366ff;"></span>S Book Scan Station</div>
+            <div class="legend-item"><span class="legend-icon" style="background:#9933ff;"></span>Public Computer</div>
+            <div class="legend-item"><span class="legend-icon" style="background:#9370db;"></span>ADA Public Computer</div>
+            <div class="legend-item"><span class="legend-icon" style="background:#ff9900;"></span>Print Release Station</div>
+            <div class="legend-item"><span class="legend-icon" style="background:#444;"></span>eduroam (Many Areas)</div>
+
+            <div style="font-weight:bold; margin:15px 0 5px; font-size:12px; color:#666;">Rooms & Structures</div>
+            <div class="legend-item"><span class="legend-icon" style="background:#e9c46a;"></span>Study Room</div>
+            <div class="legend-item"><span class="legend-icon" style="background:#264653;"></span>Silent Study Area</div>
+            <div class="legend-item"><span class="legend-icon" style="background:repeating-linear-gradient(45deg, #222, #222 2px, #000 2px, #000 4px);"></span>Stairs</div>
+        </div>
+
+        <div style="font-size:11px; color:#888; border-top:1px solid #eee; padding-top:10px; margin-top:20px;">
+            <strong>Controls:</strong><br>
+            • Left Click: Rotate<br>
+            • Right Click: Pan (Ground)<br>
+            • Scroll: Zoom
+        </div>
+    </div>
+
+    <script>
+        function toggleMenu(show) {
+            const panel = document.getElementById('ui-panel');
+            const btn = document.getElementById('toggle-menu');
+            if (show) {
+                panel.classList.remove('collapsed');
+                btn.style.display = 'none';
+            } else {
+                panel.classList.add('collapsed');
+                setTimeout(() => btn.style.display = 'block', 300);
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+        // --- Configuration ---
+        const STACK_HEIGHT = 4;
+        const STACK_WIDTH = 1.1; 
+        const STACK_DEPTH = 5;
+        const ROOM_HEIGHT = 4.5;
+        
+        // --- Color Mapping (Vibrant & Distinct) ---
+        function getStackColor(label) {
+            if (!label) return 0xaaaaaa;
+            if (label.includes("Overflow")) return 0x777777;
+            const prefix = label.replace(/[0-9]/g, '');
+            const map = {
+                // Lvl B
+                'DH': 0xFF6B6B, 'DG': 0xFF8787, 'DD': 0xFFA5A5, 'DE': 0xFFB8B8,
+                'AJ': 0x4ECDC4, 'AS': 0x45B7D1, 'AZ': 0x3CA0D0, 'AE': 0x81ECEC,
+                'BD': 0x96CEB4, 'BM': 0xFFEEAD, 'BR': 0xFFD93D,
+                'AP': 0xFF6F91, 'AC': 0xE55039, 'B': 0xFF9671, 'BF': 0xFFC75F, 'BX': 0xF9F871,
+                'DA': 0xD4A5A5, 'DB': 0x9B59B6, 'CT': 0x8E44AD,
+                // Lvl C
+                'DK': 0x1ABC9C, 'DR': 0x16A085, 'DP': 0x2ECC71, 'DS': 0x27AE60,
+                'DT': 0x3498DB, 'GR': 0x2980B9, 'HC': 0x9B59B6, 'HD': 0x8E44AD,
+                'HF': 0x34495E, 'HA': 0x2C3E50, 'HJ': 0xF1C40F, 'J': 0xF39C12,
+                'JK': 0xE67E22, 'JL': 0xD35400, 'HN': 0xE74C3C, 'HQ': 0xC0392B, 'HX': 0xBDC3C7, 'HV': 0x95A5A6,
+                'PS': 0x20bf6b, 
+                // Lvl D
+                'JN': 0x55E6C1, 'JX': 0x58B19F, 'JQ': 0x4BCFFA, 'K': 0x2C3A47, 'KZD': 0x2f3542,
+                'P': 0xB33771, 'PC': 0x3B3B98, 'PJ': 0x182C61, 'PK': 0x6D214F, 'PL': 0xFC427B,
+                'PM': 0xFEA47F, 'PN': 0x25CCF7, 'PQ': 0xEAB543, 'PR': 0x55E6C1,
+                'PS': 0xCAD3C8, 'PT': 0xF97F51, 'QD': 0x1B9CFC, 'LC': 0xD6A2E8,
+                'RC': 0x82589F, 'Z': 0x3C40C6, 'Folios': 0xFFD700, 'N': 0x546E7A, 'NX': 0x3dc1d3,
+                'EPE': 0x8854d0, 'LZ': 0x40407a, 'TR': 0xcd6133
+            };
+            
+            for (const key in map) {
+                if (label.startsWith(key)) return map[key];
+            }
+            return 0x888888;
+        }
+
+        // --- Scene Setup ---
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color('#f0f0f0');
+        
+        const grid = new THREE.GridHelper(400, 80, 0xbbbbbb, 0xdddddd);
+        grid.position.y = -0.5;
+        scene.add(grid);
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 1000);
+        
+        // ORIENTATION: High Y, slightly negative Z to look "North"
+        camera.position.set(0, 180, -10); 
+        camera.lookAt(0, 0, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(renderer.domElement);
+
+        const labelRenderer = new CSS2DRenderer();
+        labelRenderer.setSize(window.innerWidth, window.innerHeight);
+        labelRenderer.domElement.style.position = 'absolute';
+        labelRenderer.domElement.style.top = '0px';
+        labelRenderer.domElement.style.pointerEvents = 'none';
+        container.appendChild(labelRenderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        // CHANGE: Restrict panning to ground plane
+        controls.screenSpacePanning = false; 
+        controls.minDistance = 10;
+        controls.maxDistance = 400;
+        controls.maxPolarAngle = Math.PI / 2 - 0.1;
+        
+        // CENTER THE CAMERA
+        controls.target.set(0, 0, 0);
+        controls.update();
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+        scene.add(ambientLight);
+        
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
+        dirLight.position.set(50, 100, 50);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+
+        // --- Builder Functions ---
+        const activeLevelObjects = [];
+
+        function clearLevel() {
+            activeLevelObjects.forEach(obj => {
+                scene.remove(obj);
+                if(obj.geometry) obj.geometry.dispose();
+                if(obj.material) {
+                    if(Array.isArray(obj.material)) obj.material.forEach(m=>m.dispose());
+                    else obj.material.dispose();
+                }
+            });
+            activeLevelObjects.length = 0;
+            const labels = document.querySelectorAll('.label-3d');
+            labels.forEach(label => label.remove());
+        }
+
+        function createFloor(width, depth, x, z) {
+            const geometry = new THREE.PlaneGeometry(width, depth);
+            const material = new THREE.MeshStandardMaterial({ color: 0xe0e0e0, side: THREE.DoubleSide });
+            const floor = new THREE.Mesh(geometry, material);
+            floor.rotation.x = -Math.PI / 2;
+            floor.position.set(x, 0, z);
+            floor.receiveShadow = true;
+            scene.add(floor);
+            activeLevelObjects.push(floor);
+
+            const edges = new THREE.EdgesGeometry(geometry);
+            const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x999999 }));
+            line.rotation.x = -Math.PI / 2;
+            line.position.set(x, 0.1, z);
+            scene.add(line);
+            activeLevelObjects.push(line);
+        }
+
+        function createStack(x, z, label, rotY = 0) {
+            const color = getStackColor(label);
+            const geometry = new THREE.BoxGeometry(STACK_WIDTH, STACK_HEIGHT, STACK_DEPTH);
+            const material = new THREE.MeshStandardMaterial({ color: color, roughness: 0.6 });
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.position.set(x, STACK_HEIGHT/2, z);
+            mesh.rotation.y = rotY;
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            scene.add(mesh);
+            activeLevelObjects.push(mesh);
+
+            const shelfGeo = new THREE.BoxGeometry(STACK_WIDTH + 0.05, 0.05, STACK_DEPTH);
+            const shelfMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
+            for(let i=1; i<4; i++) {
+                const shelf = new THREE.Mesh(shelfGeo, shelfMat);
+                shelf.position.y = i - (STACK_HEIGHT/2); 
+                mesh.add(shelf);
+            }
+
+            if (label) {
+                const div = document.createElement('div');
+                div.className = 'label-3d label-stack';
+                div.textContent = label;
+                const labelObj = new CSS2DObject(div);
+                labelObj.position.set(0, STACK_HEIGHT/2 + 1.2, 0); 
+                mesh.add(labelObj);
+            }
+        }
+
+        function createRange(startX, startZ, rows, cols, xGap, zGap, labels, labelIndexStart = 0) {
+            let labelIdx = labelIndexStart;
+            for(let r=0; r<rows; r++) {
+                for(let c=0; c<cols; c++) {
+                    let lbl = '';
+                    if (Array.isArray(labels)) {
+                        lbl = labels[labelIdx % labels.length];
+                        labelIdx++;
+                    } else {
+                        lbl = labels;
+                    }
+                    createStack(startX + (c*xGap), startZ + (r*zGap), lbl);
+                }
+            }
+        }
+
+        function createRoom(x, z, width, depth, label, colorHex = 0xffffff) {
+            const geometry = new THREE.BoxGeometry(width, ROOM_HEIGHT, depth);
+            const material = new THREE.MeshStandardMaterial({ color: colorHex, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.position.set(x, ROOM_HEIGHT/2, z);
+            scene.add(mesh);
+            activeLevelObjects.push(mesh);
+
+            const edges = new THREE.EdgesGeometry(geometry);
+            const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x000000 }));
+            mesh.add(line);
+
+            if (label) {
+                const div = document.createElement('div');
+                div.className = 'label-3d label-room';
+                div.textContent = label;
+                const labelObj = new CSS2DObject(div);
+                labelObj.position.set(0, ROOM_HEIGHT/2 + 1, 0);
+                mesh.add(labelObj);
+            }
+        }
+
+        function createMarker(x, z, type, label, rotation = 0) {
+            const colors = {
+                'exit': 0x00ff00, 'kiosk': 0xff0000, 'water': 0x00ffff, 'restroom': 0xff00ff,
+                'scan': 0x3366ff, 'pc': 0x9933ff, 'ada': 0x9370db, 'print': 0xff9900, 'elevator': 0xffff00
+            };
+            const color = colors[type] || 0xffffff;
+            
+            const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.5), new THREE.MeshBasicMaterial({ color: 0x444 }));
+            pole.position.set(x, 1.25, z);
+            scene.add(pole);
+            activeLevelObjects.push(pole);
+
+            let headGeo;
+            if (type === 'elevator') headGeo = new THREE.BoxGeometry(1.5, 2, 1.5);
+            else if (type === 'exit') headGeo = new THREE.BoxGeometry(1.2, 0.6, 0.2); // Rectangular for exit sign
+            else headGeo = new THREE.SphereGeometry(0.5);
+
+            const head = new THREE.Mesh(headGeo, new THREE.MeshStandardMaterial({ color: color }));
+            head.position.y = 1.5;
+            head.rotation.y = rotation; // Apply rotation
+            pole.add(head);
+
+            const div = document.createElement('div');
+            div.className = 'label-3d label-marker';
+            div.style.backgroundColor = '#' + color.toString(16).padStart(6, '0');
+            div.textContent = label || type.toUpperCase();
+            
+            const labelObj = new CSS2DObject(div);
+            labelObj.position.set(0, 1.5, 0);
+            head.add(labelObj);
+        }
+
+        function createStairs(x, z, rotation = 0, type = 'straight') {
+            const group = new THREE.Group();
+            group.position.set(x, 0.5, z); 
+            group.rotation.y = rotation;
+            
+            const material = new THREE.MeshStandardMaterial({ 
+                color: 0x222222, 
+                roughness: 0.7,
+                metalness: 0.3 
+            });
+
+            if (type === 'spiral') {
+                const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 8), material);
+                pole.position.y = 4;
+                group.add(pole);
+
+                for(let i=0; i<20; i++) {
+                    const stepGeo = new THREE.BoxGeometry(5, 0.3, 1.8);
+                    const step = new THREE.Mesh(stepGeo, material);
+                    step.position.y = i * 0.4;
+                    step.position.x = 2.5; 
+                    step.rotation.y = i * 0.35;
+                    group.add(step);
+                }
+            } else {
+                const stepCount = 12;
+                const stepHeight = 0.5;
+                const stepDepth = 1.2;
+                const stepWidth = 7; 
+                
+                for(let i=0; i<stepCount; i++) {
+                    const geo = new THREE.BoxGeometry(stepWidth, stepHeight, stepDepth);
+                    const mesh = new THREE.Mesh(geo, material);
+                    mesh.position.set(0, (i * stepHeight) + (stepHeight/2), i * stepDepth);
+                    group.add(mesh);
+                }
+            }
+
+            scene.add(group);
+            activeLevelObjects.push(group);
+        }
+
+        // --- LEVEL DEFINITIONS ---
+        const levels = {
+            'A': () => {
+                // Ground Floor - Administrative & Entry
+                createFloor(140, 60, 20, 0); // East Building base (x: -50 to 90)
+                createFloor(100, 30, -80, 0); // West Building connector
+
+                // Lobby Entrance (East)
+                createRoom(85, 0, 12, 20, "Building Entrance", 0xdddddd);
+                createStack(75, 0, "Privileges Desk", Math.PI/2);
+                createMarker(80, 15, 'scan', 'BookScan');
+                createMarker(80, -15, 'print', 'Print');
+
+                // Gates Transition
+                createRoom(60, 0, 2, 25, "Library Gates", 0xaaaaaa);
+
+                // Secure Zone
+                const circGeo = new THREE.BoxGeometry(35, 1.2, 4);
+                const circMesh = new THREE.Mesh(circGeo, new THREE.MeshStandardMaterial({color:0x8B4513}));
+                circMesh.position.set(45, 0.6, 0); 
+                scene.add(circMesh);
+                activeLevelObjects.push(circMesh);
+                const circLabel = document.createElement('div');
+                circLabel.className = 'label-3d label-room';
+                circLabel.textContent = 'Circulation Desk';
+                circLabel.style.backgroundColor = '#8B4513';
+                const circLabelObj = new CSS2DObject(circLabel);
+                circLabelObj.position.set(0, 2, 0);
+                circMesh.add(circLabelObj);
+
+                // Core: Elevators & Stairs
+                createMarker(25, 20, 'elevator', 'E9-E11'); 
+                createStairs(15, 20, 0, 'spiral'); 
+                createRoom(25, -20, 25, 15, "198 Staff Office", 0xaaaaaa); 
+                createMarker(10, 0, 'pc', 'Public PC');
+            },
+            'B': () => {
+                createFloor(80, 40, -60, 0); 
+                createFloor(120, 100, 50, 0); 
+                createFloor(20, 10, -10, 0); 
+
+                // WEST
+                createRange(-90, -12, 3, 4, 3.5, 6, "DH");
+                createRange(-65, -12, 3, 3, 3.5, 6, "DG");
+                createRange(-90, 12, 2, 6, 3.5, 6, "DD");
+                createStack(-65, 12, "DE");
+                createRoom(-38, 12, 8, 8, "DC708");
+
+                // EAST
+                createRange(-5, -40, 4, 2, 4, 7, "AE");
+                createRange(7, -40, 4, 2, 4, 7, "AJ");
+                createRange(19, -40, 4, 2, 4, 7, "AS");
+                createStack(29, -35, "AZ"); 
+                createRange(35, -40, 4, 2, 4, 7, "BD");
+                createRange(47, -40, 4, 2, 4, 7, "BM");
+                createRange(59, -40, 4, 2, 4, 7, "BR");
+                createRange(71, -40, 4, 2, 4, 7, "BX");
+
+                createRange(-5, -5, 3, 2, 4, 7, "AC");
+                createRange(7, -5, 3, 2, 4, 7, "AP");
+                createRange(35, -5, 3, 2, 4, 7, "Overflow");
+                createRange(47, -5, 3, 2, 4, 7, "B");
+                createRange(59, -5, 3, 2, 4, 7, "BF");
+                
+                createRange(60, 5, 2, 2, 4, 7, "DA3");
+                createStack(72, 5, "DB401");
+                createRange(60, 20, 3, 3, 4, 7, "DA");
+                createRange(80, 25, 3, 2, 4, 7, "CT");
+                createRange(95, 25, 3, 1, 4, 7, "Overflow");
+
+                createRoom(20, 42, 20, 10, "Silent Study Area", 0x264653);
+                createRoom(40, 44, 6, 6, "B4");
+                createRoom(47, 44, 6, 6, "B5");
+                createRoom(54, 44, 6, 6, "B6");
+                createRoom(61, 44, 6, 6, "B7");
+
+                createMarker(45, 0, 'elevator', 'E9-E11');
+                createMarker(-20, 0, 'elevator', 'E12');
+                createMarker(95, -40, 'exit', 'Exit');
+                // North Exit B
+                createMarker(75, 10, 'exit', 'Exit (Stairs)', Math.PI/2); 
+                // Second Exit (X:17, Z:10)
+                createMarker(17, 10, 'exit', 'Exit (Stairs)', Math.PI/2);
+
+                createMarker(-95, 0, 'kiosk', 'SOS');
+                createMarker(5, 45, 'restroom', 'WC');
+                createMarker(85, -5, 'ada', 'ADA');
+                createMarker(10, 0, 'scan', 'Scan');
+                
+                createStairs(25, 5, 0, 'spiral');
+                createStairs(75, 10, Math.PI, 'straight'); // North Emergency Stairs B
+            },
+            'C': () => {
+                createFloor(80, 40, -60, 0);
+                createFloor(120, 100, 50, 0);
+                createFloor(20, 10, -10, 0);
+
+                // WEST
+                createRange(-88, -12, 3, 3, 4, 6, "DK");
+                createRange(-68, -12, 3, 3, 4, 6, "DR");
+                createRange(-88, 12, 2, 3, 4, 6, "DS");
+                createStack(-68, 12, "PS");
+                createStack(-50, 10, "DT643");
+                createStack(-45, 10, "DT644");
+                createRoom(-95, 0, 10, 15, "Moffitt Tunnel", 0x553333);
+
+                // EAST
+                const xStart = 5;
+                const gap = 13;
+                const zTop = -42;
+                const zBot = 22;
+
+                createRange(xStart, zTop, 4, 2, 3.5, 8, "GR");
+                createRange(xStart+gap, zTop, 4, 2, 3.5, 8, "HC");
+                createRange(xStart+gap*2, zTop, 4, 2, 3.5, 8, "HD");
+                createRange(xStart+gap*3, zTop, 4, 2, 3.5, 8, "HF");
+                createRange(xStart+gap*4, zTop, 4, 2, 3.5, 8, "J");
+                createRange(xStart+gap*5, zTop, 4, 2, 3.5, 8, "JK");
+                createRange(xStart+gap*6, zTop, 4, 2, 3.5, 8, "JL");
+
+                createRange(xStart+gap, zBot, 4, 2, 3.5, 8, "HA");
+                createRange(xStart+gap*3, zBot, 4, 2, 3.5, 8, "HJ");
+                createRange(xStart+gap*5, zBot, 4, 2, 3.5, 8, "HN");
+                createRange(xStart+gap*6, zBot, 4, 2, 3.5, 8, "HQ");
+                createRange(xStart+gap*5, zBot+15, 2, 2, 3.5, 8, "HX");
+                createStack(xStart+gap*6, 5, "HV");
+                createStack(80, 5, "F3001");
+
+                createRoom(35, 44, 6, 6, "C1");
+                createRoom(42, 44, 6, 6, "C2");
+                createRoom(49, 44, 6, 6, "C4");
+                createRoom(56, 44, 6, 6, "C5");
+                createRoom(63, 44, 6, 6, "C6");
+                createRoom(70, 44, 6, 6, "C7");
+
+                createMarker(45, 0, 'elevator', 'E9-E11');
+                createMarker(-25, 0, 'elevator', 'E12');
+                // North Exit C
+                createMarker(75, 10, 'exit', 'Exit (Stairs)', Math.PI/2);
+                // Second Exit (X:17, Z:10)
+                createMarker(17, 10, 'exit', 'Exit (Stairs)', Math.PI/2);
+
+                createMarker(30, 45, 'restroom', 'WC');
+                createStairs(25, 5, 0, 'spiral');
+                createStairs(75, 10, Math.PI, 'straight'); // North Emergency Stairs C
+            },
+            'D': () => {
+                createFloor(80, 40, -60, 0);
+                createFloor(120, 100, 50, 0);
+                createFloor(20, 10, -10, 0);
+
+                createRoom(-75, 0, 15, 15, "IPs Area", 0x2F4F4F);
+                
+                // WEST
+                createRange(-90, -18, 2, 2, 3.5, 6, "JZ");
+                createRange(-80, -18, 2, 2, 3.5, 6, "K");
+                createRange(-70, -18, 2, 2, 3.5, 6, "JN");
+                createRange(-60, -18, 2, 2, 3.5, 6, "JX");
+                createStack(-90, -8, "JQ"); 
+                createStack(-60, -8, "KZD");
+                createStack(-55, -8, "EPE"); 
+                createStack(-50, -8, "PL"); 
+                
+                createRange(-90, 16, 2, 3, 3.5, 6, "ND");
+                createRange(-75, 16, 2, 3, 3.5, 6, "NK");
+                createRange(-60, 16, 2, 3, 3.5, 6, "NX"); 
+
+                // EAST
+                createRange(0, -5, 3, 2, 3.5, 6, "N");
+                for(let z = -40; z < 40; z+=6) {
+                    createStack(108, z, "Folios", Math.PI/2);
+                }
+
+                const gap = 10;
+                const startX = 5;
+                createRange(startX, -40, 3, 2, 3.5, 7, "PC");
+                createRange(startX+gap, -40, 3, 2, 3.5, 7, "PJ");
+                createRange(startX+gap*2, -40, 3, 2, 3.5, 7, "PK");
+                createRange(startX+gap*3, -40, 3, 2, 3.5, 7, "PL");
+                createRange(startX+gap*4, -40, 3, 2, 3.5, 7, "PM");
+                createRange(startX+gap*5, -40, 3, 2, 3.5, 7, "PN");
+                createRange(startX+gap*6, -40, 3, 2, 3.5, 7, "PQ");
+                createRange(startX+gap*7, -40, 3, 2, 3.5, 7, "PR");
+                createRange(startX+gap*8, -40, 3, 2, 3.5, 7, "PS");
+
+                createRange(85, 20, 3, 2, 3.5, 7, "PT");
+                createStack(80, 35, "QD");
+                
+                // Tight Cluster for Z1035 / PT / TR / QD / RC
+                // Located South-East (Positive X, Positive Z relative to center)
+                // x=75, z=20 area. Emergency Exit is Left (West) of this -> x=65, z=20
+                createStack(80, 20, "Z1035"); 
+                createRange(85, 20, 2, 1, 2, 4, "PT"); 
+                createStack(80, 15, "TR"); 
+                createStack(80, 25, "QD"); 
+                createStack(75, 20, "RC");
+                
+                // Emergency Exit (Stairs) - West (Left) of the cluster above
+                createMarker(75, 10, 'exit', 'Exit (Stairs)', Math.PI/2);
+                createStairs(75, 10, Math.PI, 'straight');
+
+                // Second Exit (X:17, Z:10)
+                createMarker(17, 10, 'exit', 'Exit (Stairs)', Math.PI/2);
+
+                createStack(60, 20, "LZ"); 
+                
+                // Central Cluster
+                createStack(32, 10, "Z1035"); 
+                createStack(39, 10, "LC");
+                createStack(45, 10, "RC"); 
+                createStack(80, -15, "fNX");
+                createStack(86, -15, "INX"); 
+
+                createRoom(35, 44, 5, 5, "D1");
+                createRoom(41, 44, 5, 5, "D2");
+                createRoom(47, 44, 5, 5, "D4");
+                createRoom(53, 44, 5, 5, "D5");
+                createRoom(59, 44, 5, 5, "D6");
+                createRoom(65, 44, 5, 5, "D7");
+                createRoom(71, 44, 5, 5, "D16");
+                createRoom(77, 44, 5, 5, "D14");
+
+                createMarker(45, 0, 'elevator', 'E9-E11');
+                createMarker(-25, 0, 'elevator', 'E12');
+                
+                createMarker(-90, 0, 'kiosk', 'SOS');
+                createStairs(25, 5, 0, 'spiral'); 
+            }
+        };
+
+        window.switchLevel = (levelId) => {
+            clearLevel();
+            document.querySelectorAll('.floor-btn').forEach(b => b.classList.remove('active'));
+            const btn = Array.from(document.querySelectorAll('.floor-btn')).find(b => b.textContent.includes(`LEVEL ${levelId}`));
+            if(btn) btn.classList.add('active');
+            if(levels[levelId]) levels[levelId]();
+        };
+
+        switchLevel('B');
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            const angle = controls.getAzimuthalAngle();
+            const compass = document.getElementById('compass-rose');
+            if (compass) {
+                // Correct rotation: apply the azimuthal angle
+                compass.style.transform = `rotate(${angle}rad)`;
+            }
+            renderer.render(scene, camera);
+            labelRenderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            labelRenderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
